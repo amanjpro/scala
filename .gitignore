@@ -48,3 +48,25 @@
 
 # Standard symbolic link to build/quick/bin
 /qbin
+/src/compiler/scala/nbproject/private/
+/src/compiler/scala/build/
+
+
+# Vim temp files
+*~
+*.swp
+
+# Mac temp files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthmbs.db
+Thumbs.db
+
+
+
+# IDES
+**/*/.idea/
+*.iml
