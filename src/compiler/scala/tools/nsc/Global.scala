@@ -36,6 +36,15 @@ import backend.icode.analysis._
 import scala.language.postfixOps
 import scala.tools.nsc.ast.{TreeGen => AstTreeGen}
 
+
+/*
+ * TODO: {Amanj}
+ * If the current phase is after refchecks then do the following:
+ * 1- run namer, packageobjects, typer, patmat, superaccessors,
+ *    extmethods, pickler and refchecks on the programs full AST
+ * 2- continue from the next phase on.
+ */
+
 class Global(var currentSettings: Settings, var reporter: Reporter)
     extends SymbolTable
     with CompilationUnits
@@ -47,6 +56,9 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     with Positions { self =>
 
   // the mirror --------------------------------------------------
+
+  var current: Phase = NoPhase
+  var isStarting = true
 
   override def isCompilerUniverse = true
   override val useOffsetPositions = !currentSettings.Yrangepos
@@ -1609,7 +1621,8 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     def compileUnits(units: List[CompilationUnit], fromPhase: Phase): Unit =
       compileUnitsInternal(units, fromPhase)
 
-    private def compileUnitsInternal(units: List[CompilationUnit], fromPhase: Phase) {
+    private def compileUnitsInternal(units: List[CompilationUnit], fromPhase: Phase,
+          current: Phase = NoPhase) {
       doInvalidation()
 
       units foreach addUnit
@@ -1622,8 +1635,12 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
      while (globalPhase.hasNext && !reporter.hasErrors) {
         val startTime = currentTime
         phase = globalPhase
-        globalPhase.run()
+        if(isStarting && phase == refchecksPhase) {
+          println("phase name: " + globalPhase.name)
+          isStarting = false
+        }
 
+        globalPhase.run()
         // progress update
         informTime(globalPhase.description, startTime)
         val shouldWriteIcode = (
@@ -1654,6 +1671,10 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
         // move the pointer
         globalPhase = globalPhase.next
 
+        if(globalPhase == icodePhase) {
+          isStarting = true
+        }
+
         // run tree/icode checkers
         if (settings.check containsPhase globalPhase.prev)
           runCheckers()
@@ -1663,6 +1684,12 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
           statistics.print(phase)
 
         advancePhase()
+        if(!isStarting) {
+          namerPhase.run()
+          typerPhase.run()
+          picklerPhase.run()
+          // refchecksPhase.run()
+        }
       }
 
       if (traceSymbolActivity)
