@@ -48,10 +48,6 @@ abstract class SymbolTable extends macros.Universe
                               with Internals
 {
 
-  var isStarting = false
-  var icode: Phase = NoPhase
-  var namer: Phase = NoPhase
-  var refchecks: Phase = NoPhase
   val gen = new InternalTreeGen { val global: SymbolTable.this.type = SymbolTable.this }
 
   def log(msg: => AnyRef): Unit
@@ -265,29 +261,6 @@ abstract class SymbolTable extends macros.Universe
   }
 
   @inline final def exitingPhase[T](ph: Phase)(op: => T): T = {
-    /*
-     * TODO: {Amanj}
-     * If the current phase is after pickler then do the following:
-     * 1- run namer, packageobjects, typer, patmat superaccessors,
-     *    extmethods and pickler on the programs full AST
-     * 2- continue from the next phase on.
-     */
-    println(ph.name)
-    if(namer == NoPhase && ph.name == "name") {
-      namer = ph
-    }
-    if(refchecks == NoPhase && ph.name == "refchecks") {
-      refchecks = ph
-    }
-    if(icode == NoPhase && ph.name == "icode") {
-      icode = ph
-    }
-    if(namer != NoPhase && icode == NoPhase && refchecks != NoPhase) {
-      if(isAtPhaseAfter(refchecks) && !isAtPhaseAfter(icode)) {
-        isStarting = false
-        enteringPhase(namer)(op)
-      }
-    }
     enteringPhase(ph.next)(op)
   }
   @inline final def enteringPrevPhase[T](op: => T): T       = enteringPhase(phase.prev)(op)
