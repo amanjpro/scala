@@ -120,6 +120,216 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
     }
   }
 
+  /**
+   * A stupid method to bypass the stupidity of Scala's dependent types.
+   *
+   * This is called in CompilationUnits.CompilationUnit.cleanUnit only
+   * @author Amanj Sherwany 
+   */
+  def interTreeCopier(tree: Tree, dest: Global): dest.Tree = {
+    tree match {
+      case ClassDef(mods, name, tparams, impl) =>
+        val dmods = mods.asInstanceOf[dest.Modifiers]
+        val dname = name.asInstanceOf[dest.TypeName]
+        val dtparams = tparams.map((x) => 
+              interTreeCopier(x, dest).asInstanceOf[dest.TypeDef]) 
+        val dimpl = interTreeCopier(impl, dest).asInstanceOf[dest.Template]
+        new dest.ClassDef(dmods, dname, dtparams, dimpl)
+      case PackageDef(pid, stats) =>
+        val dpid = interTreeCopier(pid, dest).asInstanceOf[dest.RefTree]
+        val dstats = stats.map((x) => interTreeCopier(x, dest)) 
+        new dest.PackageDef(dpid, dstats)
+      case ModuleDef(mods: Modifiers, name: Name, impl: Template) =>
+        val dmods = mods.asInstanceOf[dest.Modifiers]
+        val dname = name.asInstanceOf[dest.TermName]
+        val dimpl = interTreeCopier(impl, dest).asInstanceOf[dest.Template]
+        new dest.ModuleDef(dmods, dname, dimpl)
+      case ValDef(mods, name, tpt, rhs) =>
+        val dmods = mods.asInstanceOf[dest.Modifiers]
+        val dname = name.asInstanceOf[dest.TermName]
+        val dtpt = interTreeCopier(tpt, dest)
+        val drhs = interTreeCopier(rhs, dest)
+        new dest.ValDef(dmods, dname, dtpt, drhs)
+      case DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
+        val dmods = mods.asInstanceOf[dest.Modifiers]
+        val dname = name.asInstanceOf[dest.TermName]
+        val dtparams = tparams.map((x) => 
+              interTreeCopier(x, dest).asInstanceOf[dest.TypeDef]) 
+        val dvparamss = vparamss.map((xs) => xs.map((x) => 
+            interTreeCopier(x, dest).asInstanceOf[dest.ValDef]))
+        val dtpt = interTreeCopier(tpt, dest)
+        val drhs = interTreeCopier(rhs, dest)
+        new dest.DefDef(dmods, dname, dtparams, dvparamss, dtpt, drhs)
+      case TypeDef(mods, name, tparams, rhs) =>
+        val dmods = mods.asInstanceOf[dest.Modifiers]
+        val dname = name.asInstanceOf[dest.TypeName]
+        val dtparams = tparams.map((x) => 
+              interTreeCopier(x, dest).asInstanceOf[dest.TypeDef]) 
+        val drhs = interTreeCopier(rhs, dest)
+        new dest.TypeDef(dmods, dname, dtparams, drhs)
+      case LabelDef(name, params, rhs) =>
+        val dname = name.asInstanceOf[dest.TermName]
+        val dparams = params.map((x) => 
+              interTreeCopier(x, dest).asInstanceOf[dest.Ident]) 
+        val drhs = interTreeCopier(rhs, dest)
+        new dest.LabelDef(dname, dparams, drhs)
+      case Import(expr, selectors) =>
+        val dexpr = interTreeCopier(expr, dest)
+        val dselectors = selectors.map((x) => x.asInstanceOf[dest.ImportSelector])
+        new dest.Import(dexpr, dselectors)
+      case Template(parents, self, body) =>
+        val dparents = parents.map((x) => interTreeCopier(x, dest))
+        val dself = interTreeCopier(self, dest).asInstanceOf[dest.ValDef]
+        val dbody = body.map((x) => interTreeCopier(x, dest))
+        new dest.Template(dparents, dself, dbody)
+      case Block(stats: List[Tree], expr: Tree) =>
+        val dstats = stats.map((x) => interTreeCopier(x, dest))
+        val dexpr = interTreeCopier(expr, dest)
+        new dest.Block(dstats, dexpr)
+      case CaseDef(pat, guard, body) =>
+        val dpat = interTreeCopier(pat, dest)
+        val dguard = interTreeCopier(guard, dest) 
+        val dbody = interTreeCopier(body, dest) 
+        new dest.CaseDef(dpat, dguard, dbody)
+      case Alternative(trees) =>
+        val dtrees = trees.map(interTreeCopier(_, dest))
+        new dest.Alternative(dtrees)
+      case Star(elem) =>
+        val delem = interTreeCopier(elem, dest)
+        new dest.Star(delem)
+      case Bind(name, body) =>
+        val dname = name.asInstanceOf[dest.Name]
+        val dbody = interTreeCopier(body, dest)
+        new dest.Bind(dname, dbody)
+      case UnApply(fun, args) =>
+        val dfun = interTreeCopier(fun, dest)
+        val dargs = args.map(interTreeCopier(_, dest))
+        new dest.UnApply(dfun, dargs)
+      case ArrayValue(elemtpt, trees) =>
+        val delemtpt = interTreeCopier(elemtpt, dest)
+        val dtrees = trees.map(interTreeCopier(_, dest))
+        new dest.ArrayValue(delemtpt, dtrees)
+      case Function(vparams, body) =>
+        val dvparams = vparams.map((x) => 
+            interTreeCopier(x, dest).asInstanceOf[dest.ValDef])
+        val dbody = interTreeCopier(body, dest)
+        new dest.Function(dvparams, dbody)
+      case Assign(lhs, rhs) =>
+        val dlhs = interTreeCopier(lhs, dest)
+        val drhs = interTreeCopier(rhs, dest)
+        new dest.Assign(dlhs, drhs)
+      case AssignOrNamedArg(lhs, rhs) =>
+        val dlhs = interTreeCopier(lhs, dest)
+        val drhs = interTreeCopier(rhs, dest)
+        new dest.AssignOrNamedArg(dlhs, drhs)
+      case If(cond, thenp, elsep) =>
+        val dcond = interTreeCopier(cond, dest)
+        val dthenp = interTreeCopier(thenp, dest)
+        val delsep = interTreeCopier(elsep, dest)
+        new dest.If(dcond, dthenp, delsep)
+      case Match(selector, cases) =>
+        val dselector = interTreeCopier(selector, dest)
+        val dcases = cases.map((x) => 
+            interTreeCopier(x, dest).asInstanceOf[dest.CaseDef])
+        new dest.Match(dselector, dcases)
+      case Return(expr) =>
+        val dexpr = interTreeCopier(expr, dest)
+        new dest.Return(dexpr)
+      case Try(block, catches, finalizer) =>
+        val dblock = interTreeCopier(block, dest)
+        val dcatches = catches.map((x) => 
+            interTreeCopier(x, dest).asInstanceOf[dest.CaseDef])
+        val dfinalizer = interTreeCopier(finalizer, dest)
+        new dest.Try(dblock, dcatches, dfinalizer)
+      case Throw(expr) =>
+        val dexpr = interTreeCopier(expr, dest)
+        new dest.Throw(dexpr)
+      case New(tpt) =>
+        val dtpt = interTreeCopier(tpt, dest)
+        new dest.New(dtpt)
+      case Typed(expr, tpt) =>
+        val dexpr = interTreeCopier(expr, dest)
+        val dtpt = interTreeCopier(tpt, dest)
+        new dest.Typed(dexpr, dtpt)
+      case TypeApply(fun, args) =>
+        val dfun = interTreeCopier(fun, dest)
+        val dargs = args.map((x) => interTreeCopier(x, dest))
+        new dest.TypeApply(dfun, dargs)
+      case Apply(fun, args) =>
+        val dfun = interTreeCopier(fun, dest)
+        val dargs = args.map((x) => interTreeCopier(x, dest))
+        tree match { 
+          // TODO: use a tree attachment to track whether this is an apply to 
+          // implicit args or a view
+          case _: ApplyToImplicitArgs => new dest.ApplyToImplicitArgs(dfun, dargs)
+          case _: ApplyImplicitView => new dest.ApplyImplicitView(dfun, dargs)
+          // TODO: ApplyConstructor ???
+          case self.pendingSuperCall => dest.pendingSuperCall
+          case _ => new dest.Apply(dfun, dargs)
+        }
+      case ApplyDynamic(qual, args) =>
+        val dqual = interTreeCopier(qual, dest)
+        val dargs = args.map((x) => interTreeCopier(x, dest))
+        new dest.ApplyDynamic(dqual, dargs)
+      case Super(qual, mix) =>
+        val dqual = interTreeCopier(qual, dest)
+        val dmix = mix.asInstanceOf[dest.TypeName]
+        new dest.Super(dqual, dmix)
+      case This(qual) =>
+        val dqual = qual.asInstanceOf[dest.TypeName]
+        new dest.This(dqual)
+      case Select(qualifier, selector) =>
+        val dqualifier = interTreeCopier(qualifier, dest)
+        val dselector = selector.asInstanceOf[dest.Name]
+        new dest.Select(dqualifier, dselector)
+      case Ident(name) =>
+        val dname = name.asInstanceOf[dest.Name]
+        new dest.Ident(dname)
+      case RefTree(qualifier, selector) =>
+        val dqualifier = interTreeCopier(qualifier, dest)
+        val dselector = selector.asInstanceOf[dest.Name]
+        dest.RefTree(dqualifier, dselector)
+      case ReferenceToBoxed(idt) =>
+        val didt = interTreeCopier(idt, dest).asInstanceOf[dest.Ident]
+        new dest.ReferenceToBoxed(didt)
+      case Literal(value) =>
+        val dvalue = value.asInstanceOf[dest.Constant]
+        new dest.Literal(dvalue)
+      case x : TypeTree =>
+        new dest.TypeTree()
+      case Annotated(annot, arg) =>
+        val dannot = interTreeCopier(annot, dest)
+        val darg = interTreeCopier(arg, dest)
+        new dest.Annotated(dannot, darg)
+      case SingletonTypeTree(ref) =>
+        val dref = interTreeCopier(ref, dest)
+        new dest.SingletonTypeTree(dref)
+      case SelectFromTypeTree(qualifier, selector) =>
+        val dqualifier = interTreeCopier(qualifier, dest)
+        val dselector = selector.asInstanceOf[dest.Name]
+        new dest.SelectFromTypeTree(dqualifier, dselector.toTypeName)
+      case CompoundTypeTree(templ) =>
+        val dtempl = interTreeCopier(templ, dest).asInstanceOf[dest.Template]
+        new dest.CompoundTypeTree(dtempl)
+      case AppliedTypeTree(tpt, args) =>
+        val dtpt = interTreeCopier(tpt, dest)
+        val dargs = args.map((x) => interTreeCopier(x, dest))
+        new dest.AppliedTypeTree(dtpt, dargs)
+      case TypeBoundsTree(lo, hi) =>
+        val dlo = interTreeCopier(lo, dest)
+        val dhi = interTreeCopier(hi, dest)
+        new dest.TypeBoundsTree(dlo, dhi)
+      case ExistentialTypeTree(tpt, whereClauses) =>
+        val dtpt = interTreeCopier(tpt, dest)
+        val dwhereClauses = whereClauses.map((x) => 
+            interTreeCopier(x, dest).asInstanceOf[dest.MemberDef])
+        new dest.ExistentialTypeTree(dtpt, dwhereClauses)
+      case EmptyTree => dest.EmptyTree
+      case _ => 
+        tree.asInstanceOf[dest.Tree]
+    }
+  }
+
   class LazyTreeCopier extends super.LazyTreeCopier with TreeCopier {
     def DocDef(tree: Tree, comment: DocComment, definition: Tree) = tree match {
       case t @ DocDef(comment0, definition0)
