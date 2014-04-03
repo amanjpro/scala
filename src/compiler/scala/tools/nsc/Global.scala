@@ -57,8 +57,6 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
 
   // the mirror --------------------------------------------------
 
-  var current: Phase = NoPhase
-  var isStarting = true
 
   override def isCompilerUniverse = true
   override val useOffsetPositions = !currentSettings.Yrangepos
@@ -1211,6 +1209,9 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     /** The currently compiled unit; set from GlobalPhase */
     var currentUnit: CompilationUnit = NoCompilationUnit
 
+    // Flags to verify AST
+    var isStarting = true
+    val isChecker = false
     // This change broke sbt; I gave it the thrilling name of uncheckedWarnings0 so
     // as to recover uncheckedWarnings for its ever-fragile compiler interface.
     val deprecationWarnings0 = new ConditionalWarning("deprecation", settings.deprecation)
@@ -1621,11 +1622,12 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     def compileUnits(units: List[CompilationUnit], fromPhase: Phase): Unit =
       compileUnitsInternal(units, fromPhase)
 
-    private def compileUnitsInternal(units: List[CompilationUnit], fromPhase: Phase,
+    private def compileUnitsInternal(units1: List[CompilationUnit], fromPhase: Phase,
           current: Phase = NoPhase) {
       doInvalidation()
 
-      units foreach addUnit
+      var units = units1
+      units.foreach(addUnit(_))
       val startTime = currentTime
 
       reporter.reset()
@@ -1635,12 +1637,23 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
      while (globalPhase.hasNext && !reporter.hasErrors) {
         val startTime = currentTime
         phase = globalPhase
-        if(isStarting && phase == refchecksPhase) {
-          println("phase name: " + globalPhase.name)
+        if(!isChecker && isStarting && phase == picklerPhase) {
           isStarting = false
         }
 
+        println(s"---------------- ${globalPhase.name} -------------")
         globalPhase.run()
+        if(!isChecker && !isStarting) {
+          val tempGlobal = Global(settings, reporter)
+          val checkerCompiler = new tempGlobal.CheckerRunner()
+          checkerCompiler.compileUnits(units.map((x) => x.cleanUnit(tempGlobal)))
+          // val checkerCompiler = new CheckerRunner()
+          // checkerCompiler.compileUnits(units.map((x) => x.cleanUnit))
+          // namerPhase.run()
+          // typerPhase.run()
+          // picklerPhase.run()
+          // refchecksPhase.run()
+        } 
         // progress update
         informTime(globalPhase.description, startTime)
         val shouldWriteIcode = (
@@ -1667,11 +1680,11 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
         // browse trees with swing tree viewer
         if (settings.browse containsPhase globalPhase)
           treeBrowser browse (phase.name, units)
-
+        
         // move the pointer
         globalPhase = globalPhase.next
 
-        if(globalPhase == icodePhase) {
+        if(!isChecker && globalPhase == uncurryPhase) {
           isStarting = true
         }
 
@@ -1684,12 +1697,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
           statistics.print(phase)
 
         advancePhase()
-        if(!isStarting) {
-          namerPhase.run()
-          typerPhase.run()
-          picklerPhase.run()
-          // refchecksPhase.run()
-        }
+        
       }
 
       if (traceSymbolActivity)
@@ -1770,6 +1778,29 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     }
   } // class Run
 
+
+  /**
+   * A CheckerRunner is a single execution of the compiler on a set of a units.
+   *
+   * It checks the validity of the compilation state after any two none-checker 
+   * phases that are part of the front-end of the compiler. These phases start at 
+   * refchecks and end at icode.
+   * 
+   * @author Amanj Sherwany
+   */
+  class CheckerRunner extends Run {
+    override val isChecker = true
+
+
+    def compileUnits(units: List[CompilationUnit]): Unit = {
+      compileUnits(units, namerPhase)
+    }
+
+
+    protected override def stopPhase(name: String): Boolean = {
+      name == "refchecks"
+    }
+  } // class CheckerRunner
   def printAllUnits() {
     print("[[syntax trees at end of %25s]]".format(phase))
     exitingPhase(phase)(currentRun.units foreach { unit =>
