@@ -23,7 +23,22 @@ trait CompilationUnits { global: Global =>
   /** One unit of compilation that has been submitted to the compiler.
     * It typically corresponds to a single file of source code.  It includes
     * error-reporting hooks.  */
+
   class CompilationUnit(val source: SourceFile) extends CompilationUnitContextApi { self =>
+
+    /**
+     * Generates a new clean compilation unit based on the current 
+     * tree body.
+     *
+     * This is called in Global.Run.compileUnitsInternal only
+     * @author Amanj Sherwany
+     */
+    def cleanUnit[T <: Global](glbl: T): glbl.CompilationUnit = {
+      val unit = new glbl.CompilationUnit(source)
+      unit.body = interTreeCopier(body, glbl)
+      glbl.resetAttrs(unit.body)
+      unit
+    }
 
     /** the fresh name creator */
     implicit val fresh: FreshNameCreator     = new FreshNameCreator
