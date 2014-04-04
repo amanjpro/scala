@@ -1210,6 +1210,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     var currentUnit: CompilationUnit = NoCompilationUnit
 
     // Flags to verify AST
+    // -- Amanj Sherwany
     var isStarting = true
     val isChecker = false
     // This change broke sbt; I gave it the thrilling name of uncheckedWarnings0 so
@@ -1622,11 +1623,10 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
     def compileUnits(units: List[CompilationUnit], fromPhase: Phase): Unit =
       compileUnitsInternal(units, fromPhase)
 
-    private def compileUnitsInternal(units1: List[CompilationUnit], fromPhase: Phase,
+    private def compileUnitsInternal(units: List[CompilationUnit], fromPhase: Phase,
           current: Phase = NoPhase) {
       doInvalidation()
 
-      var units = units1
       units.foreach(addUnit(_))
       val startTime = currentTime
 
@@ -1637,22 +1637,26 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
      while (globalPhase.hasNext && !reporter.hasErrors) {
         val startTime = currentTime
         phase = globalPhase
+        // We are starting as long as this is at a phase
+        // earlier than pickler and we are not an instance
+        // of CheckerRunner
+        // - Amanj Sherwany
         if(!isChecker && isStarting && phase == picklerPhase) {
           isStarting = false
         }
 
+        
         println(s"---------------- ${globalPhase.name} -------------")
         globalPhase.run()
+
+        // If this is not an instance of CheckerRunner and
+        // it is not starting, then run a new instance of
+        // CheckerRunner after any two phases.
+        // - Amanj Sherwany
         if(!isChecker && !isStarting) {
           val tempGlobal = Global(settings, reporter)
           val checkerCompiler = new tempGlobal.CheckerRunner()
           checkerCompiler.compileUnits(units.map((x) => x.cleanUnit(tempGlobal)))
-          // val checkerCompiler = new CheckerRunner()
-          // checkerCompiler.compileUnits(units.map((x) => x.cleanUnit))
-          // namerPhase.run()
-          // typerPhase.run()
-          // picklerPhase.run()
-          // refchecksPhase.run()
         } 
         // progress update
         informTime(globalPhase.description, startTime)
@@ -1684,7 +1688,9 @@ class Global(var currentSettings: Settings, var reporter: Reporter)
         // move the pointer
         globalPhase = globalPhase.next
 
-        if(!isChecker && globalPhase == uncurryPhase) {
+        // Come out from starter phase if you are at flattenPhase
+        // - Amanj Sherwany
+        if(!isChecker && globalPhase == flattenPhase) {
           isStarting = true
         }
 
