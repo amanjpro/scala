@@ -127,10 +127,10 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
    * @author Amanj Sherwany 
    */
   def interTreeCopier(tree: Tree, dest: Global): dest.Tree = {
-    tree match {
+    val r = tree match {
       case ClassDef(mods, name, tparams, impl) =>
         val dmods = mods.asInstanceOf[dest.Modifiers]
-        val dname = name.asInstanceOf[dest.TypeName]
+        val dname = dest.newTypeName(name.decoded)
         val dtparams = tparams.map((x) => 
               interTreeCopier(x, dest).asInstanceOf[dest.TypeDef]) 
         val dimpl = interTreeCopier(impl, dest).asInstanceOf[dest.Template]
@@ -141,18 +141,18 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
         new dest.PackageDef(dpid, dstats)
       case ModuleDef(mods: Modifiers, name: Name, impl: Template) =>
         val dmods = mods.asInstanceOf[dest.Modifiers]
-        val dname = name.asInstanceOf[dest.TermName]
+        val dname = dest.newTermName(name.decoded)
         val dimpl = interTreeCopier(impl, dest).asInstanceOf[dest.Template]
         new dest.ModuleDef(dmods, dname, dimpl)
       case ValDef(mods, name, tpt, rhs) =>
         val dmods = mods.asInstanceOf[dest.Modifiers]
-        val dname = name.asInstanceOf[dest.TermName]
+        val dname = dest.newTermName(name.decoded)
         val dtpt = interTreeCopier(tpt, dest)
         val drhs = interTreeCopier(rhs, dest)
         new dest.ValDef(dmods, dname, dtpt, drhs)
       case DefDef(mods, name, tparams, vparamss, tpt, rhs) =>
         val dmods = mods.asInstanceOf[dest.Modifiers]
-        val dname = name.asInstanceOf[dest.TermName]
+        val dname = dest.newTermName(name.decoded)
         val dtparams = tparams.map((x) => 
               interTreeCopier(x, dest).asInstanceOf[dest.TypeDef]) 
         val dvparamss = vparamss.map((xs) => xs.map((x) => 
@@ -162,13 +162,13 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
         new dest.DefDef(dmods, dname, dtparams, dvparamss, dtpt, drhs)
       case TypeDef(mods, name, tparams, rhs) =>
         val dmods = mods.asInstanceOf[dest.Modifiers]
-        val dname = name.asInstanceOf[dest.TypeName]
+        val dname = dest.newTypeName(name.decoded)
         val dtparams = tparams.map((x) => 
               interTreeCopier(x, dest).asInstanceOf[dest.TypeDef]) 
         val drhs = interTreeCopier(rhs, dest)
         new dest.TypeDef(dmods, dname, dtparams, drhs)
       case LabelDef(name, params, rhs) =>
-        val dname = name.asInstanceOf[dest.TermName]
+        val dname = dest.newTermName(name.decoded)
         val dparams = params.map((x) => 
               interTreeCopier(x, dest).asInstanceOf[dest.Ident]) 
         val drhs = interTreeCopier(rhs, dest)
@@ -198,7 +198,10 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
         val delem = interTreeCopier(elem, dest)
         new dest.Star(delem)
       case Bind(name, body) =>
-        val dname = name.asInstanceOf[dest.Name]
+        val dname = name match {
+          case x : TypeName => dest.newTypeName(name.decoded)
+          case x : TermName => dest.newTermName(name.decoded)
+        }
         val dbody = interTreeCopier(body, dest)
         new dest.Bind(dname, dbody)
       case UnApply(fun, args) =>
@@ -273,27 +276,36 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
         new dest.ApplyDynamic(dqual, dargs)
       case Super(qual, mix) =>
         val dqual = interTreeCopier(qual, dest)
-        val dmix = mix.asInstanceOf[dest.TypeName]
+        val dmix = dest.newTypeName(mix.decoded)
         new dest.Super(dqual, dmix)
       case This(qual) =>
-        val dqual = qual.asInstanceOf[dest.TypeName]
+        val dqual = dest.newTypeName(qual.decoded)
         new dest.This(dqual)
       case Select(qualifier, selector) =>
         val dqualifier = interTreeCopier(qualifier, dest)
-        val dselector = selector.asInstanceOf[dest.Name]
+        val dselector =  selector match {
+          case x : TypeName => dest.newTypeName(x.decoded)
+          case x : TermName => dest.newTermName(x.decoded)
+        }
         new dest.Select(dqualifier, dselector)
       case Ident(name) =>
-        val dname = name.asInstanceOf[dest.Name]
+        val dname = name match {
+          case x : TypeName => dest.newTypeName(x.decoded)
+          case x : TermName => dest.newTermName(x.decoded)
+        }
         new dest.Ident(dname)
       case RefTree(qualifier, selector) =>
         val dqualifier = interTreeCopier(qualifier, dest)
-        val dselector = selector.asInstanceOf[dest.Name]
+        val dselector =  selector match {
+          case x : TypeName => dest.newTypeName(x.decoded)
+          case x : TermName => dest.newTermName(x.decoded)
+        }
         dest.RefTree(dqualifier, dselector)
       case ReferenceToBoxed(idt) =>
         val didt = interTreeCopier(idt, dest).asInstanceOf[dest.Ident]
         new dest.ReferenceToBoxed(didt)
       case Literal(value) =>
-        val dvalue = value.asInstanceOf[dest.Constant]
+        val dvalue = dest.Constant(value.value)
         new dest.Literal(dvalue)
       case x : TypeTree =>
         new dest.TypeTree()
@@ -306,7 +318,7 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
         new dest.SingletonTypeTree(dref)
       case SelectFromTypeTree(qualifier, selector) =>
         val dqualifier = interTreeCopier(qualifier, dest)
-        val dselector = selector.asInstanceOf[dest.Name]
+        val dselector = dest.newTypeName(selector.decoded)
         new dest.SelectFromTypeTree(dqualifier, dselector.toTypeName)
       case CompoundTypeTree(templ) =>
         val dtempl = interTreeCopier(templ, dest).asInstanceOf[dest.Template]
@@ -328,6 +340,8 @@ trait Trees extends scala.reflect.internal.Trees { self: Global =>
       case _ => 
         tree.asInstanceOf[dest.Tree]
     }
+    r.pos = tree.pos
+    r
   }
 
   class LazyTreeCopier extends super.LazyTreeCopier with TreeCopier {
